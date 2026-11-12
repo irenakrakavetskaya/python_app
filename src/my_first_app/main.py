@@ -1,12 +1,15 @@
 import random
+from collections.abc import AsyncIterable
 from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
+from functools import lru_cache
 from time import perf_counter
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import jwt
 from fastapi import (
+    BackgroundTasks,
     Body,
     Cookie,
     Depends,
@@ -32,13 +35,33 @@ from fastapi.responses import (
     RedirectResponse,
 )
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from fastapi.templating import Jinja2Templates
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 from pydantic import AfterValidator, BaseModel, EmailStr, Field, HttpUrl
 from sqlmodel import Field as SQLField
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from . import config
+
+# from .dependencies import get_query_token, get_token_header
+from .internal import admin
+from .routers import invoice, items, users, websocket
+
+# app = FastAPI(dependencies=[Depends(get_query_token)])
 app = FastAPI()
+app.include_router(users.router)
+app.include_router(items.router)
+app.include_router(websocket.router)
+app.include_router(invoice.router)
+app.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["admin"],
+    # dependencies=[Depends(get_token_header)],
+    responses={418: {"description": "I'm a teapot"}},
+)
 
 # openssl rand -hex 32
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
@@ -59,6 +82,7 @@ items = {
     "foo": {"name": "Foo", "price": 50.2},
     "bar": {"name": "Bar", "description": "The Bar fighters", "price": 62, "tax": 20.2},
 }
+
 
 fake_users_db = {
     "johndoe": {
@@ -92,12 +116,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+templates = Jinja2Templates(directory="templates")
+
 sqlite_file_name = "database.db"
 # create the database later
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 connect_args = {"check_same_thread": False}
 engine = create_engine(sqlite_url, connect_args=connect_args)
+
+
+class StreamItem(BaseModel):
+    name: str
+    description: str | None
+
+
+streamItems = [
+    StreamItem(name="Plumbus", description="A multi-purpose household device."),
+    StreamItem(name="Portal Gun", description="A portal opening device."),
+    StreamItem(name="Meeseeks Box", description="A box that summons a Meeseeks."),
+]
+
+
+class Prompt(BaseModel):
+    text: str
 
 
 class HeroBase(SQLModel):
@@ -374,6 +416,20 @@ async def get_current_active_user(
     return current_user
 
 
+@lru_cache
+def get_settings():
+    return config.Settings()
+
+
+@app.get("/info")
+async def info(settings: Annotated[config.Settings, Depends(get_settings)]):
+    return {
+        "app_name": settings.app_name,
+        "admin_email": settings.admin_email,
+        "items_per_user": settings.items_per_user,
+    }
+
+
 @app.post("/token")
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -424,6 +480,54 @@ def read_root():
     return {"Hello": "World"}
 
 
+def write_notification(email: str, message=""):
+    with open("log.txt", mode="w") as email_file:
+        content = f"notification for {email}: {message}"
+        email_file.write(content)
+
+
+def write_log(message: str):
+    with open("log.txt", mode="a") as log:
+        log.write(message)
+
+
+def get_query(background_tasks: BackgroundTasks, q: str | None = None):
+    if q:
+        message = f"found query: {q}\n"
+        background_tasks.add_task(write_log, message)
+    return q
+
+
+@app.post("/send-notification/{email}")
+async def send_notification(
+    email: str, background_tasks: BackgroundTasks, q: Annotated[str, Depends(get_query)]
+):
+    message = f"message to {email}\n"
+    background_tasks.add_task(write_log, message)
+    return {"message": "Message sent"}
+
+
+@app.get("/items/stream", response_class=EventSourceResponse)
+async def sse_items() -> AsyncIterable[StreamItem]:
+    for item in StreamItem:
+        yield item
+
+
+@app.get("/items/stream-retry", response_class=EventSourceResponse)
+async def stream_items() -> AsyncIterable[ServerSentEvent]:
+    yield ServerSentEvent(comment="stream of item updates")
+    for i, item in enumerate(streamItems):
+        yield ServerSentEvent(data=item, event="item_update", id=str(i + 1), retry=5000)
+
+
+@app.post("/chat/stream", response_class=EventSourceResponse)
+async def stream_chat(prompt: Prompt) -> AsyncIterable[ServerSentEvent]:
+    words = prompt.text.split()
+    for word in words:
+        yield ServerSentEvent(data=word, event="token")
+    yield ServerSentEvent(raw_data="[DONE]", event="done")
+
+
 @app.get("/filtered-items/", tags=["items"])
 async def read_filtered_items(
     pagination: Annotated[Pagination, Query()],
@@ -445,6 +549,13 @@ async def read_books(
     else:
         id, item = random.choice(list(data.items()))
     return {"id": id, "name": item}
+
+
+@app.get("/items-template/{id}", response_class=HTMLResponse)
+async def read_template(request: Request, id: str):
+    return templates.TemplateResponse(
+        request=request, name="item_path.html", context={"id": id}
+    )
 
 
 @app.get(

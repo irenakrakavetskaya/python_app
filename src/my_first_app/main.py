@@ -4,6 +4,8 @@ from time import perf_counter
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 # from .database import create_db_and_tables, get_session
 from .database import get_session
@@ -14,6 +16,7 @@ from .exceptions import (
     validation_exception_handler,
 )
 from .internal import admin
+from .ratelimit import limiter
 from .routers import (
     auth,
     examples,
@@ -38,6 +41,9 @@ __all__ = ["Hero", "app", "get_session", "verify_token"]
 
 # app = FastAPI(lifespan=lifespan)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(websocket.router)

@@ -26,6 +26,7 @@ class User(SQLModel, table=True):
     hashed_password: str
     disabled: bool = False
     is_admin: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
+    token_version: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
 
 
 class UserCreate(SQLModel):
@@ -54,6 +55,7 @@ class UserAdminUpdate(SQLModel):
 
 class Token(SQLModel):
     access_token: str
+    refresh_token: str
     token_type: str
 
 
@@ -154,3 +156,28 @@ class ItemPublic(ItemBase):
     updated_at: datetime
     images: list[ImagePublic] = []
     tags: list[TagPublic] = []
+
+
+class RefreshRequest(SQLModel):
+    refresh_token: str = Field(min_length=1, max_length=200)
+
+
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_tokens"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True, ondelete="CASCADE")
+    token_hash: str = Field(
+        max_length=64, index=True, unique=True
+    )  # SHA-256, never the raw token
+    family_id: str = Field(
+        max_length=36, index=True
+    )  # all tokens from one login share this
+    expires_at: datetime = Field(sa_type=DateTime(timezone=True), index=True)
+    revoked_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=True))
+    created_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),
+        sa_column_kwargs={"server_default": func.now()},
+        nullable=False,
+    )

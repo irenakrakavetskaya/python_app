@@ -1,17 +1,24 @@
 FROM python:3.15-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Pin to the version from `uv --version` on your machine
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /uvx /bin/
 
 WORKDIR /app
 
 ENV UV_LINK_MODE=copy \
-    UV_NO_DEV=1
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_NO_DEV=1 \
+    PATH="/app/.venv/bin:$PATH"
 
-# 1. Install dependencies only (cached unless pyproject.toml or uv.lock change)
+# 1. Dependencies only (cached unless pyproject.toml or uv.lock change)
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project
 
-# 2. Copy the source and install your package
+# 2. Source + project install
 COPY src ./src
-RUN uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked
 
-CMD ["uv", "run", "fastapi", "run", "src/my_first_app/main.py", "--host", "0.0.0.0"]
+# Add --proxy-headers if running behind Nginx/Traefik
+CMD ["fastapi", "run", "src/my_first_app/main.py", "--host", "0.0.0.0"]

@@ -1,12 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Field as SQLField
 from sqlmodel import SQLModel, select
 
 from ..database import SessionDep
+from .auth import get_current_active_user
 
-router = APIRouter()
+router = APIRouter(
+    tags=["heroes"],
+    dependencies=[Depends(get_current_active_user)],  # every route needs login
+)
 
 
 class HeroBase(SQLModel):

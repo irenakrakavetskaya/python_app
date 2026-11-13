@@ -1,7 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, HttpUrl
 
-router = APIRouter()
+from .auth import get_current_active_user
+
+router = APIRouter(
+    tags=["invoice"],
+    dependencies=[Depends(get_current_active_user)],  # every route needs login
+)
 
 
 class Invoice(BaseModel):

@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    command: uv run fastapi dev src/my_first_app/main.py --host 0.0.0.0
+    command: sh -c "uv run alembic upgrade head && uv run fastapi dev src/my_first_app/main.py --host 0.0.0.0"
     ports:
       - "8000:8000"
     volumes:
@@ -9,6 +9,7 @@ services:
       - /app/.venv
     environment:
       DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       UV_NO_DEV: "0"   # install dev dependencies (pytest, ruff) in dev
     depends_on:
       db:
@@ -16,12 +17,12 @@ services:
 
   db:
     image: postgres:16
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app
       POSTGRES_DB: app
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

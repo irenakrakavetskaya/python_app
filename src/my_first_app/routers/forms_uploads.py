@@ -1,10 +1,15 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-router = APIRouter()
+from .auth import get_current_active_user
+
+router = APIRouter(
+    tags=["profile"],
+    dependencies=[Depends(get_current_active_user)],  # every route needs login
+)
 
 
 class FormData(BaseModel):

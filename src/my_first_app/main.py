@@ -1,10 +1,12 @@
+# from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import create_db_and_tables, get_session
+# from .database import create_db_and_tables, get_session
+from .database import get_session
 from .dependencies import get_token_header as verify_token
 from .exceptions import (
     UnicornException,
@@ -18,7 +20,6 @@ from .routers import (
     forms_uploads,
     heroes,
     invoice,
-    item_examples,
     items,
     streaming,
     users,
@@ -28,11 +29,20 @@ from .routers.heroes import Hero
 
 __all__ = ["Hero", "app", "get_session", "verify_token"]
 
+
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#    create_db_and_tables()
+#    yield
+
+
+# app = FastAPI(lifespan=lifespan)
 app = FastAPI()
 app.include_router(users.router)
 app.include_router(items.router)
 app.include_router(websocket.router)
 app.include_router(invoice.router)
+app.include_router(items.tags_router)
 app.include_router(
     admin.router,
     prefix="/admin",
@@ -55,28 +65,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
-
-
 app.include_router(examples.info_router)
-app.include_router(auth.token_router)
+app.include_router(auth.router)
 app.add_exception_handler(UnicornException, unicorn_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.include_router(examples.notification_router)
 app.include_router(streaming.router)
-app.include_router(item_examples.router)
+app.include_router(items.demo_router)
 app.include_router(examples.files_router)
-app.include_router(item_examples.creation_router)
 app.include_router(examples.weights_router)
-app.include_router(auth.user_router)
 app.include_router(examples.portal_router)
-app.include_router(item_examples.name_router)
-app.include_router(auth.fake_token_router)
 app.include_router(forms_uploads.router)
-app.include_router(auth.current_user_router)
 
 
 @app.middleware("http")

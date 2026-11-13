@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from pydantic import EmailStr, HttpUrl, StringConstraints
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, false, func
 from sqlmodel import Field, Relationship, SQLModel
 
 # Tag names are trimmed and lower-cased on input: "Rock " and "rock" are the same tag
@@ -25,6 +25,7 @@ class User(SQLModel, table=True):
     full_name: str | None = None
     hashed_password: str
     disabled: bool = False
+    is_admin: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
 
 
 class UserCreate(SQLModel):
@@ -39,6 +40,16 @@ class UserPublic(SQLModel):
     username: str
     email: str
     full_name: str | None = None
+
+
+class UserDetail(UserPublic):
+    is_admin: bool
+    disabled: bool
+
+
+class UserAdminUpdate(SQLModel):
+    is_admin: bool | None = None
+    disabled: bool | None = None
 
 
 class Token(SQLModel):

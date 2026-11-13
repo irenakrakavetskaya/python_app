@@ -1,7 +1,7 @@
 # from contextlib import asynccontextmanager
 from time import perf_counter
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -76,6 +76,15 @@ app.include_router(examples.files_router)
 app.include_router(examples.weights_router)
 app.include_router(examples.portal_router)
 app.include_router(forms_uploads.router)
+app.include_router(users.router)
+app.include_router(users.admin_router)
+app.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(auth.get_current_admin)],
+    responses={418: {"description": "I'm a teapot"}},
+)
 
 
 @app.middleware("http")

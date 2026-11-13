@@ -75,6 +75,15 @@ def get_current_active_user(
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 
+def get_current_admin(current_user: CurrentUser) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return current_user
+
+
+AdminUser = Annotated[User, Depends(get_current_admin)]
+
+
 @router.post("/auth/register", response_model=UserPublic, status_code=201)
 def register(user_in: UserCreate, session: SessionDep):
     user = User(

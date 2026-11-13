@@ -64,7 +64,8 @@ ItemDep = Annotated[Item, Depends(get_item_or_404)]
 
 
 def get_own_item(item: ItemDep, current_user: CurrentUser) -> Item:
-    if item.owner_id != current_user.id:
+    # Owner or admin
+    if item.owner_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not your item")
     return item
 
